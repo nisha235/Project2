@@ -2,7 +2,6 @@ Description:
   This will deploy the EC2 instance on the private subnets along with launch configurations.
 
 Parameters:
-
      EnvironmentName:
          Description: Env Name that will be prefixed in order to access Variables exported in the stack from Lession 21
          Type: String
@@ -44,6 +43,11 @@ Resources:
           FromPort: 22
           ToPort: 22
           IpProtocol: tcp
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 0
+          ToPort: 65535
+          CidrIp: 0.0.0.0/0
 
   WebAppLaunchConfig:
     Type: AWS::AutoScaling::LaunchConfiguration
@@ -59,8 +63,7 @@ Resources:
           systemctl start snap.amazon-ssm-agent.amazon-ssm-agent.service
           cd /var/www/html
           sudo chmod -R 777 /var/www/html/
-          aws s3 cp s3://serverproject-s3bucket-1lb19h43su5wh/udacity-starter-website.zip . 
-          unzip -o udacity-starter-website.zip             
+          aws s3 cp s3://bucketproject-s3bucket-8by2klq5807r/index.html . 
           systemctl start apache2.service  
       ImageId: ami-0d1cd67c26f5fca19  # ubuntu/images/hvm-ssd/ubuntu-bionic-18.04-amd64-server-20191002
       SecurityGroups:
@@ -96,6 +99,9 @@ Resources:
         Ref: WebAppLaunchConfig
       MinSize: "4"
       MaxSize: "4"
+      TargetGroupARNs:
+        - Ref: WebAppTargetGroup   
+
 
   Listener:
     Type: AWS::ElasticLoadBalancingV2::Listener
@@ -137,30 +143,7 @@ Resources:
         - Key: Name
           Value: TargetGroup
 
-  S3Bucket:
-    Type: AWS::S3::Bucket
-    DeletionPolicy: Retain
-
-  S3BucketPolicy: 
-    Type: AWS::S3::BucketPolicy
-    Properties: 
-      Bucket: 
-        Ref: S3Bucket
-      PolicyDocument: 
-        Statement: 
-          - Action: ["s3:GetObject","s3:PutObject","s3:PutObjectAcl"]
-            Effect: "Allow"
-            Resource: 
-              Fn::Join: 
-                - ""
-                -
-                  - "arn:aws:s3:::"
-                  - 
-                    Ref: "S3Bucket"
-                  - "/*"
-            Principal: "*"
   BucketInstanceProfile:
-
     Type: AWS::IAM::InstanceProfile
     Properties:
       Path: /
@@ -188,13 +171,8 @@ Resources:
         Version: 2012-10-17
         Statement:
           - Effect: Allow
-            Action: ['s3:GetObject',"elasticloadbalancing:Describe*",
-                "elasticloadbalancing:DeregisterInstancesFromLoadBalancer",
-                "elasticloadbalancing:RegisterInstancesWithLoadBalancer",
-                "ec2:Describe*",
-                "ec2:AuthorizeSecurityGroupIngress",
-                "elasticloadbalancing:DeregisterTargets",
-                "elasticloadbalancing:RegisterTargets"]
+            Action: ['s3:GetObject',
+                "ec2:Describe*"]
             Resource: '*'
       Roles:
         - !Ref S3WritableRole
@@ -205,4 +183,8 @@ Outputs:
     Value: !Ref WebAppGroup
     Export:
       Name: !Sub ${EnvironmentName}-WebAppGroup
-  
+  WebALB:
+    Description: public url of load balancer
+    Value: !Join [ "", [ "http://", !GetAtt WebAppALB.DNSName, ] ]
+    Export:
+      Name: !Sub ${EnvironmentName}-DNS-NAME
